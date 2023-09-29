@@ -821,13 +821,7 @@ function addon:OnEnable()
 		
 	local _, _, arch = GetProfessions()
 
-	if arch then
-		addon:RegisterEvent("RESEARCH_ARTIFACT_HISTORY_READY", OnArtifactHistoryReady)
-		addon:RegisterEvent("RESEARCH_ARTIFACT_COMPLETE", OnArtifactComplete)
-		RequestArtifactCompletionHistory()		-- this will trigger RESEARCH_ARTIFACT_HISTORY_READY
-	end
-	
---	addon:SetupOptions()
+	--	addon:SetupOptions()
 	ClearExpiredProfessions()	-- automatically cleanup guild profession links that are from an older version
 	LocalizeProfessionSpellIDs()
 end

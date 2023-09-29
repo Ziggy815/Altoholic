@@ -594,12 +594,7 @@ function addon:OnEnable()
 	addon:RegisterEvent("PLAYER_INTERACTION_MANAGER_FRAME_SHOW", OnCovenantSanctumInteractionStarted)
 	
 	local _, _, arch = GetProfessions()
-
-	if arch then
-		--	ARTIFACT_HISTORY_READY deprecated in 8.0
-		-- addon:RegisterEvent("ARTIFACT_HISTORY_READY", OnArtifactHistoryReady)
-		RequestArtifactCompletionHistory()		-- this will trigger ARTIFACT_HISTORY_READY
-	end
+	
 end
 
 function addon:OnDisable()
