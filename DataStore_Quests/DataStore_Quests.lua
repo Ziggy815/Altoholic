@@ -23,8 +23,9 @@ local AddonDB_Defaults = {
 			['*'] = {				-- ["Account.Realm.Name"]
 				lastUpdate = nil,
 				Quests = {},
-				QuestLinks = {},
+				QuestLinks = {},					-- No quest links in Classic !!
 				QuestHeaders = {},
+				QuestTitles = {},	
 				QuestTags = {},
 				Rewards = {},
 				Money = {},
@@ -42,8 +43,7 @@ local AddonDB_Defaults = {
 				Callings = {},
 				activeCovenantID = 0,				-- Active Covenant ID (0 = None)
 				covenantCampaignProgress = 0,		-- Track the progress in the covenant storyline
-				story91Progress = 0,					-- Track the progress in the 9.1 storyline (Chains of Domination)
-				story92Progress = 0,					-- Track the progress in the 9.2 storyline (Secrets of the First Ones)
+				StorylineProgress = {},				-- Track the progress in various storylines
 			}
 		}
 	}
@@ -106,6 +106,15 @@ local weeklyWorldQuests = {
 	[61816] = true,		-- Maldraxxus - Mortanis
 	[64531] = true,		-- The Maw - Mor'geth
 	[65143] = true,		-- Zereth Mortis - Antros
+	
+	-- Dragonflight : https://www.wowhead.com/guide/world-bosses-dragonflight
+	[69927] = true,		-- The Azure Span - Bazual
+	[69928] = true,		-- Thaldraszus - Liskanoth
+	[69929] = true,		-- Ohn'ahran Plains - Strunraan
+	[69930] = true,		-- The Waking Shores - Basrikron
+	-- [] = true,		-- Zaralek Cavern - The Zaqali Elders ?
+	[76367] = true,		-- Emerald Dream - Aurostor 
+	
 }
 
 local covenantCampaignIDs = {
@@ -123,15 +132,69 @@ local covenantCampaignQuestChapters = {
 	[Enum.CovenantType.Necrolord] = { 59609, 60272, 57648, 58820, 59894, 57636, 58624, 61761, 62406 },		-- https://www.wowhead.com/guides/necrolords-covenant-campaign-story-rewards
 }
 
--- 9.0
-local TorghastQuestLine = { 62932, 62935, 62938, 60139, 62966, 62969, 60146, 62836, 61730 }
--- 9.1
-local ChainsCampaignQuestChapters = { 63639, 64555, 63902, 63727, 63622, 63656, 64437, 63593, 64314 }
--- 9.2
-local SecretsOfTheFirstOnesQuestChapters = { 64958, 64825, 65305, 64844, 64813, 65328, 65238 }
+local storylines = {
+	-- 9.0 Torghast
+	["Torghast"] = { 62932, 62935, 62938, 60139, 62966, 62969, 60146, 62836, 61730 },
+	-- 9.1 Chains of Domination
+	["9.1"] = { 63639, 64555, 63902, 63727, 63622, 63656, 64437, 63593, 64314 },
+	-- 9.2 Secrets of the First Ones
+	["9.2"] = { 64958, 64825, 65305, 64844, 64813, 65328, 65238 },
+	
+	-- 10.0 The Dreamer
+	["10.0"] = { 66392, 66185, 66186, 66188, 66189, 66394, 66397, 66635, 66398, 66399, 66400, 66401, 66402 },
+	-- 10.1 Embers of Neltharion
+	["10.1"] = { 73156, 75644, 72965, 75145, 74563, 72930, 75417 },
+	-- 10.1.5 Fractures in Time
+	["10.1.5"] = { 76140, 76141, 76142, 76143, 76144, 76145, 76146, 76147 },
+	-- 10.2 Guardians of the Dream
+	["10.2"] = { 75923, 77283, 76443, 77178, 76337, 76401, 76283 },
+	
+}
 
 
+-- *** Common API ***
+local API_GetNumQuestLogEntries
+local API_GetSelectedQuest
+local API_SetSelectedQuest
+local API_GetQuestInfo
+local API_DailyFrequency
+local API_GetQuestTagInfo
 
+if WOW_PROJECT_ID == WOW_PROJECT_MAINLINE then
+	API_GetNumQuestLogEntries = C_QuestLog.GetNumQuestLogEntries
+	API_GetSelectedQuest = C_QuestLog.GetSelectedQuest
+	API_SetSelectedQuest = C_QuestLog.SetSelectedQuest
+	API_DailyFrequency = Enum.QuestFrequency.Daily
+	API_WeeklyFrequency = Enum.QuestFrequency.Weekly
+	API_GetQuestInfo = function(index) 
+			local info = C_QuestLog.GetInfo(index)
+		
+			return info.title, info.level, info.groupSize, info.isHeader, info.isCollapsed, info.isComplete, 
+				info.frequency or 0, info.questID, info.isTask, info.isBounty, info.isStory, info.isHidden, info.suggestedGroup			
+		end
+	API_GetQuestTagInfo = function(questID)
+			local info = C_QuestLog.GetQuestTagInfo(questID) or {}
+			return info.tagID
+		end
+else
+	API_GetNumQuestLogEntries = GetNumQuestLogEntries
+	API_GetSelectedQuest = GetQuestLogSelection
+	API_SetSelectedQuest = SelectQuestLogEntry
+	API_DailyFrequency = LE_QUEST_FREQUENCY_DAILY
+	API_WeeklyFrequency = LE_QUEST_FREQUENCY_WEEKLY
+	API_GetQuestInfo = function(index) 
+			local title, level, groupSize, isHeader, isCollapsed, isComplete, frequency, questID, 
+					_, _, _, _, isTask, isBounty, isStory, isHidden = GetQuestLogTitle(index)
+			
+			-- 2019/09/01 groupSize = "Dungeon", "Raid" in Classic, not numeric !! => 0
+			-- temporary fix: set it to 0 (3rd return value)
+			return title, level, 0, isHeader, isCollapsed, isComplete, 
+					frequency, questID, isTask, isBounty, isStory, isHidden, 0
+		end
+	API_GetQuestTagInfo = function(questID)
+			return GetQuestTagInfo(questID)
+		end
+end
 
 -- *** Utility functions ***
 local bAnd = bit.band
@@ -145,10 +208,10 @@ end
 
 local function GetQuestLogIndexByName(name)
 	-- helper function taken from QuestGuru
-	for i = 1, C_QuestLog.GetNumQuestLogEntries() do
-		local info = C_QuestLog.GetInfo(i)
+	for i = 1, API_GetNumQuestLogEntries() do
+		local title = API_GetQuestInfo(i)
 		
-		if info.title == strtrim(name) then
+		if title == strtrim(name) then
 			return i
 		end
 	end
@@ -235,9 +298,7 @@ local function DailyResetDropDown_Initialize(self)
 end
 
 local function GetQuestTagID(questID, isComplete, frequency)
-
-	local info = C_QuestLog.GetQuestTagInfo(questID) or {}
-	local tagID = info.tagID
+	local tagID = API_GetQuestTagInfo(questID)
 	
 	if tagID then
 		-- if there is a tagID, process it
@@ -257,11 +318,11 @@ local function GetQuestTagID(questID, isComplete, frequency)
 	end
 
 	-- at this point, isComplete is either nil or 0
-	if frequency == Enum.QuestFrequency.Daily then
+	if frequency == API_DailyFrequency then
 		return "DAILY"
 	end
 
-	if frequency == Enum.QuestFrequency.Weekly then
+	if frequency == API_WeeklyFrequency then
 		return "WEEKLY"
 	end
 end
@@ -292,12 +353,12 @@ local headersState = {}
 local function SaveHeaders()
 	local headerCount = 0		-- use a counter to avoid being bound to header names, which might not be unique.
 
-	for i = C_QuestLog.GetNumQuestLogEntries(), 1, -1 do		-- 1st pass, expand all categories
-		local info = C_QuestLog.GetInfo(i)
+	for i = API_GetNumQuestLogEntries(), 1, -1 do		-- 1st pass, expand all categories
+		local _, _, _, isHeader, isCollapsed = API_GetQuestInfo(i)
 	
-		if info.isHeader then
+		if isHeader then
 			headerCount = headerCount + 1
-			if info.isCollapsed then
+			if isCollapsed then
 				ExpandQuestHeader(i)
 				headersState[headerCount] = true
 			end
@@ -307,10 +368,10 @@ end
 
 local function RestoreHeaders()
 	local headerCount = 0
-	for i = C_QuestLog.GetNumQuestLogEntries(), 1, -1 do
-		local info = C_QuestLog.GetInfo(i)
+	for i = API_GetNumQuestLogEntries(), 1, -1 do
+		local _, _, _, isHeader = API_GetQuestInfo(i)
 		
-		if info.isHeader then
+		if isHeader then
 			headerCount = headerCount + 1
 			if headersState[headerCount] then
 				CollapseQuestHeader(i)
@@ -368,7 +429,10 @@ local function ScanRewardSpells(rewards, questID)
 	end
 end
 
-local function ScanCampaignProgress(chapters, field)
+local function ScanStorylineProgress(storyline)
+	local chapters = storylines[storyline]
+	if not chapters then return end
+
 	local count = 0
 	
 	-- loop through the quest id's of the last quest of each chapter, and check if it is flagged completed
@@ -379,7 +443,7 @@ local function ScanCampaignProgress(chapters, field)
 	end
 	
 	local char = addon.ThisCharacter
-	char[field] = count
+	char.StorylineProgress[storyline] = count		-- Ex: ["9.2"] = 6
 end
 
 local function ScanCovenantCampaignProgress()
@@ -409,6 +473,7 @@ local function ScanQuests()
 	local rewards = char.Rewards
 	local tags = char.QuestTags
 	local emissaries = char.Emissaries
+	local titles = char.QuestTitles
 	local money = char.Money
 
 	wipe(quests)
@@ -416,6 +481,7 @@ local function ScanQuests()
 	wipe(headers)
 	wipe(rewards)
 	wipe(tags)
+	wipe(titles)			 
 	wipe(money)
 	
 	-- wipe(emissaries)
@@ -427,55 +493,57 @@ local function ScanQuests()
 		end
 	end
 
-	local currentSelection = C_QuestLog.GetSelectedQuest()		-- save the currently selected quest
+	local currentSelection = API_GetSelectedQuest()		-- save the currently selected quest
 	SaveHeaders()
 
 	local rewardsCache = {}
 	local lastHeaderIndex = 0
 	local lastQuestIndex = 0
 	
-	for i = 1, C_QuestLog.GetNumQuestLogEntries() do
-		local info = C_QuestLog.GetInfo(i)
-		info.frequency = info.frequency or 0
+	for i = 1, API_GetNumQuestLogEntries() do
+
+		local title, level, groupSize, isHeader, isCollapsed, isComplete, 
+				frequency, questID, isTask, isBounty, isStory, isHidden, suggestedGroup	= API_GetQuestInfo(i)
 		
-		if info.isHeader then
-			table.insert(headers, info.title or "")
+		if isHeader then
+			table.insert(headers, title or "")
 			lastHeaderIndex = lastHeaderIndex + 1
 		else
-			C_QuestLog.SetSelectedQuest(info.questID)
+			API_SetSelectedQuest(WOW_PROJECT_ID == WOW_PROJECT_MAINLINE and questID or i)
 			
-			local value = (info.isComplete and info.isComplete > 0) and 1 or 0		-- bit 0 : isComplete
-			value = value + LShift((info.frequency == Enum.QuestFrequency.Daily) and 1 or 0, 1)		-- bit 1 : isDaily
-			value = value + LShift(info.isTask and 1 or 0, 2)						-- bit 2 : isTask
-			value = value + LShift(info.isBounty and 1 or 0, 3)					-- bit 3 : isBounty
-			value = value + LShift(info.isStory and 1 or 0, 4)					-- bit 4 : isStory
-			value = value + LShift(info.isHidden and 1 or 0, 5)					-- bit 5 : isHidden
-			value = value + LShift((info.groupSize == 0) and 1 or 0, 6)		-- bit 6 : isSolo
+			local value = (isComplete and isComplete > 0) and 1 or 0		-- bit 0 : isComplete
+			value = value + LShift((frequency == API_DailyFrequency) and 1 or 0, 1)		-- bit 1 : isDaily
+			value = value + LShift(isTask and 1 or 0, 2)						-- bit 2 : isTask
+			value = value + LShift(isBounty and 1 or 0, 3)					-- bit 3 : isBounty
+			value = value + LShift(isStory and 1 or 0, 4)					-- bit 4 : isStory
+			value = value + LShift(isHidden and 1 or 0, 5)					-- bit 5 : isHidden
+			value = value + LShift((groupSize == 0) and 1 or 0, 6)		-- bit 6 : isSolo
 			-- bit 7 : unused, reserved
 
-			value = value + LShift(info.suggestedGroup, 8)							-- bits 8-10 : groupSize, 3 bits, shouldn't exceed 5
+			value = value + LShift(suggestedGroup, 8)							-- bits 8-10 : groupSize, 3 bits, shouldn't exceed 5
 			value = value + LShift(lastHeaderIndex, 11)					-- bits 11-15 : index of the header (zone) to which this quest belongs
-			value = value + LShift(info.level, 16)								-- bits 16-23 : level
+			value = value + LShift(level, 16)								-- bits 16-23 : level
 			-- value = value + LShift(GetQuestLogRewardMoney(), 24)		-- bits 24+ : money
 			
 			table.insert(quests, value)
 			lastQuestIndex = lastQuestIndex + 1
 			
-			tags[lastQuestIndex] = GetQuestTagID(info.questID, info.isComplete, info.frequency)
-			links[lastQuestIndex] = GetQuestLink(info.questID)
+			tags[lastQuestIndex] = GetQuestTagID(questID, isComplete, frequency)
+			titles[lastQuestIndex] = title
+			links[lastQuestIndex] = GetQuestLink and GetQuestLink(questID) or nil
 			money[lastQuestIndex] = GetQuestLogRewardMoney()
 
 			-- is the quest an emissary quest ?
 			-- Note: this will also process callings, since they were injected earlier
-			if emissaryQuests[info.questID] then
-				local objective, _, _, numFulfilled, numRequired = GetQuestObjectiveInfo(info.questID, 1, false)
-				emissaries[info.questID] = format("%d|%d|%d|%s|%d|%s", numFulfilled, numRequired, C_TaskQuest.GetQuestTimeLeftMinutes(info.questID), objective or "", time(), info.title)
+			if emissaryQuests[questID] then
+				local objective, _, _, numFulfilled, numRequired = GetQuestObjectiveInfo(questID, 1, false)
+				emissaries[questID] = format("%d|%d|%d|%s|%d|%s", numFulfilled, numRequired, C_TaskQuest.GetQuestTimeLeftMinutes(questID), objective or "", time(), title)
 			end
 
 			wipe(rewardsCache)
-			ScanChoices(rewardsCache, info.questID)
+			ScanChoices(rewardsCache, questID)
 			ScanRewards(rewardsCache)
-			ScanRewardSpells(rewardsCache, info.questID)
+			ScanRewardSpells(rewardsCache, questID)
 
 			if #rewardsCache > 0 then
 				rewards[lastQuestIndex] = table.concat(rewardsCache, ",")
@@ -484,11 +552,20 @@ local function ScanQuests()
 	end
 
 	RestoreHeaders()
-	C_QuestLog.SetSelectedQuest(currentSelection)		-- restore the selection to match the cursor, must be properly set if a user abandons a quest
-	ScanCovenantCampaignProgress()
-	ScanCampaignProgress(ChainsCampaignQuestChapters, "story91Progress")
-	ScanCampaignProgress(SecretsOfTheFirstOnesQuestChapters, "story92Progress")
+	API_SetSelectedQuest(currentSelection)		-- restore the selection to match the cursor, must be properly set if a user abandons a quest
 	
+	if WOW_PROJECT_ID == WOW_PROJECT_MAINLINE then
+		ScanCovenantCampaignProgress()
+		
+		ScanStorylineProgress("Torghast")
+		ScanStorylineProgress("9.1")
+		ScanStorylineProgress("9.2")
+		ScanStorylineProgress("10.0")
+		ScanStorylineProgress("10.1")
+		ScanStorylineProgress("10.1.5")
+		ScanStorylineProgress("10.2")
+		
+	end
 	addon.ThisCharacter.lastUpdate = time()
 	
 	addon:SendMessage("DATASTORE_QUESTLOG_SCANNED", char)
@@ -543,12 +620,27 @@ local function OnQuestTurnedIn(event, questID, xpReward, moneyReward)
 	end
 end
 
+
+local function GetQuestHistory_Common()
+	-- In retail, the questID is the value in the returned table
+	if WOW_PROJECT_ID == WOW_PROJECT_MAINLINE then
+		return C_QuestLog.GetAllCompletedQuestIDs()
+	end
+
+	-- In Classic and WotLK, the questID is the key ..
+	local quests = {}
+	GetQuestsCompleted(quests)	
+	
+	-- .. so let's normalize that
+	return DataStore:HashToSortedArray(quests)
+end
+
 local function RefreshQuestHistory()
 	local thisChar = addon.ThisCharacter
 	local history = thisChar.History
 	wipe(history)
 	
-	local quests = C_QuestLog.GetAllCompletedQuestIDs()
+	local quests = GetQuestHistory_Common()
 
 	--[[	In order to save memory, we'll save the completion status of 32 quests into one number (by setting bits 0 to 31)
 		Ex:
@@ -643,9 +735,17 @@ local function _GetQuestLogInfo(character, index, callingQuestID)
 	local groupName = character.QuestHeaders[headerIndex]		-- This is most often the zone name, or the profession name
 	
 	local tag = character.QuestTags[index]
-	local link = character.QuestLinks[index]
-	local questID = link:match("quest:(%d+)")
-	local questName = link:match("%[(.+)%]")
+	local link, questID, questName
+	
+	if WOW_PROJECT_ID == WOW_PROJECT_MAINLINE then
+		link = character.QuestLinks[index]
+		questID = link:match("quest:(%d+)")
+		questName = link:match("%[(.+)%]")
+	else
+		-- link = nil			-- intentionally left nil for non-retail
+		-- questID = nil
+		questName = character.QuestTitles[index]
+	end
 	
 	return questName, questID, link, groupName, level, groupSize, tag, isComplete, isDaily, isTask, isBounty, isStory, isHidden, isSolo
 end
@@ -754,6 +854,7 @@ local function _IsCharacterOnQuest(character, questID)
 		end
 	end
 	
+	-- Callings will be empty for non-retail, we can leave it as is.
 	-- If not in the quest log, it may be a Calling (even not yet accepted and not yet in the quest log)
 	for callingQuestID, _ in pairs(character.Callings) do
 		if questID == callingQuestID then
@@ -846,13 +947,31 @@ local function _GetCovenantCampaignChaptersInfo(character)
 	return chaptersInfo
 end
 
-local function _GetCampaignChaptersInfo(character, campaignID, field)
-	local chapters = C_CampaignInfo.GetChapterIDs(campaignID)	-- get the chapters of that campaign (always available for all covenants)
-	
+local function _GetStorylineProgress(character, storyline)
+	return character.StorylineProgress[storyline] or 0
+end
+
+local function _GetStorylineLength(storyline)
+	return storylines[storyline] and #storylines[storyline] or 0
+end
+
+local function _GetCampaignChaptersInfo(character, campaignID, storyline)
 	local chaptersInfo = {}
+	local progress = _GetStorylineProgress(character, storyline)
+	
+	-- Get the chapters of that campaign (always available for all covenants)
+	-- Or get the quest ID's (ex: for Torghast)
+	local chapters = campaignID
+		and C_CampaignInfo.GetChapterIDs(campaignID)
+		or storylines[storyline]
+	
+	-- Get the chapter name of a given id (step in the campaign or the questID)
+	local GetChapterName = campaignID
+		and function(id) return C_CampaignInfo.GetCampaignChapterInfo(id).name end
+		or function(id) return C_QuestLog.GetTitleForQuestID(id) or "querying.." end
 
 	for index, id in ipairs(chapters) do
-		local info = C_CampaignInfo.GetCampaignChapterInfo(id)
+		local chapterName = GetChapterName(id)
 		
 		-- completed will be true/false or nil
 		-- ex: progress is 3/9
@@ -861,53 +980,20 @@ local function _GetCampaignChaptersInfo(character, campaignID, field)
 		-- 4+ = nil (not yet started)
 			
 		local completed = nil
-		if (index <= character[field]) then
+		if (index <= progress) then
 			completed = true
-		elseif (index == character[field] + 1) and (character[field] ~= 0) then
+		elseif (index == progress + 1) and (progress ~= 0) then
 			completed = false
 		end
 		
-		table.insert(chaptersInfo, { name = info.name, completed = completed})
+		table.insert(chaptersInfo, { name = chapterName, completed = completed})
 	end
 	
 	return chaptersInfo
 end
 
-local function _GetTorghastStorylineProgress(character)
-	local count = 0
-	
-	for _, questID in ipairs(TorghastQuestLine) do
-		if _IsQuestCompletedBy(character, questID) then
-			count = count + 1
-		end
-	end
-	
-	return count
-end
-
-local function _GetTorghastStorylineLength(character)
-	return #TorghastQuestLine
-end
-
-local function _GetChainsOfDominationStorylineProgress(character)
-	return character.story91Progress
-end
-
-local function _GetChainsOfDominationStorylineLength(character)
-	return #ChainsCampaignQuestChapters
-end
-
-local function _GetSecretsOfTheFirstOnesStorylineProgress(character)
-	return character.story92Progress
-end
-
-local function _GetSecretsOfTheFirstOnesStorylineLength(character)
-	return #SecretsOfTheFirstOnesQuestChapters
-end
 
 local PublicMethods = {
-	GetEmissaryQuests = _GetEmissaryQuests,
-	GetEmissaryQuestInfo = _GetEmissaryQuestInfo,
 	GetQuestLogSize = _GetQuestLogSize,
 	GetQuestLogInfo = _GetQuestLogInfo,
 	GetQuestHeaders = _GetQuestHeaders,
@@ -922,23 +1008,25 @@ local PublicMethods = {
 	GetDailiesHistory = _GetDailiesHistory,
 	GetDailiesHistorySize = _GetDailiesHistorySize,
 	GetDailiesHistoryInfo = _GetDailiesHistoryInfo,
-	GetWeekliesHistory = _GetWeekliesHistory,
-	GetWeekliesHistorySize = _GetWeekliesHistorySize,
-	GetWeekliesHistoryInfo = _GetWeekliesHistoryInfo,
 	IsCharacterOnQuest = _IsCharacterOnQuest,
 	GetCharactersOnQuest = _GetCharactersOnQuest,
 	IterateQuests = _IterateQuests,
-	GetCovenantCampaignProgress = _GetCovenantCampaignProgress,
-	GetCovenantCampaignLength = _GetCovenantCampaignLength,
-	GetCovenantCampaignChaptersInfo = _GetCovenantCampaignChaptersInfo,
-	GetCampaignChaptersInfo = _GetCampaignChaptersInfo,
-	GetTorghastStorylineProgress = _GetTorghastStorylineProgress,
-	GetTorghastStorylineLength = _GetTorghastStorylineLength,
-	GetChainsOfDominationStorylineProgress = _GetChainsOfDominationStorylineProgress,
-	GetChainsOfDominationStorylineLength = _GetChainsOfDominationStorylineLength,
-	GetSecretsOfTheFirstOnesStorylineProgress = _GetSecretsOfTheFirstOnesStorylineProgress,
-	GetSecretsOfTheFirstOnesStorylineLength = _GetSecretsOfTheFirstOnesStorylineLength,
 }
+
+if WOW_PROJECT_ID == WOW_PROJECT_MAINLINE then
+	PublicMethods.GetEmissaryQuests = _GetEmissaryQuests
+	PublicMethods.GetEmissaryQuestInfo = _GetEmissaryQuestInfo
+	PublicMethods.GetWeekliesHistory = _GetWeekliesHistory
+	PublicMethods.GetWeekliesHistorySize = _GetWeekliesHistorySize
+	PublicMethods.GetWeekliesHistoryInfo = _GetWeekliesHistoryInfo
+	PublicMethods.GetCovenantCampaignProgress = _GetCovenantCampaignProgress
+	PublicMethods.GetCovenantCampaignLength = _GetCovenantCampaignLength
+	PublicMethods.GetCovenantCampaignChaptersInfo = _GetCovenantCampaignChaptersInfo
+	
+	PublicMethods.GetStorylineProgress = _GetStorylineProgress
+	PublicMethods.GetStorylineLength = _GetStorylineLength
+	PublicMethods.GetCampaignChaptersInfo = _GetCampaignChaptersInfo
+end
 
 function addon:OnInitialize()
 	addon.db = LibStub("AceDB-3.0"):New(addonName .. "DB", AddonDB_Defaults)
@@ -956,30 +1044,30 @@ function addon:OnInitialize()
 	DataStore:SetCharacterBasedMethod("GetDailiesHistory")
 	DataStore:SetCharacterBasedMethod("GetDailiesHistorySize")
 	DataStore:SetCharacterBasedMethod("GetDailiesHistoryInfo")
-	DataStore:SetCharacterBasedMethod("GetWeekliesHistory")
-	DataStore:SetCharacterBasedMethod("GetWeekliesHistorySize")
-	DataStore:SetCharacterBasedMethod("GetWeekliesHistoryInfo")
-	DataStore:SetCharacterBasedMethod("GetEmissaryQuestInfo")
 	DataStore:SetCharacterBasedMethod("IsCharacterOnQuest")
 	DataStore:SetCharacterBasedMethod("IterateQuests")
-	DataStore:SetCharacterBasedMethod("GetCovenantCampaignProgress")
-	DataStore:SetCharacterBasedMethod("GetCovenantCampaignLength")
-	DataStore:SetCharacterBasedMethod("GetCovenantCampaignChaptersInfo")
-	DataStore:SetCharacterBasedMethod("GetCampaignChaptersInfo")
-	DataStore:SetCharacterBasedMethod("GetTorghastStorylineProgress")
-	DataStore:SetCharacterBasedMethod("GetTorghastStorylineLength")
-	DataStore:SetCharacterBasedMethod("GetChainsOfDominationStorylineProgress")
-	DataStore:SetCharacterBasedMethod("GetChainsOfDominationStorylineLength")
-	DataStore:SetCharacterBasedMethod("GetSecretsOfTheFirstOnesStorylineProgress")
-	DataStore:SetCharacterBasedMethod("GetSecretsOfTheFirstOnesStorylineLength")
+	
+	if WOW_PROJECT_ID == WOW_PROJECT_MAINLINE then
+		DataStore:SetCharacterBasedMethod("GetWeekliesHistory")
+		DataStore:SetCharacterBasedMethod("GetWeekliesHistorySize")
+		DataStore:SetCharacterBasedMethod("GetWeekliesHistoryInfo")
+		DataStore:SetCharacterBasedMethod("GetEmissaryQuestInfo")
+		DataStore:SetCharacterBasedMethod("GetCovenantCampaignProgress")
+		DataStore:SetCharacterBasedMethod("GetCovenantCampaignLength")
+		DataStore:SetCharacterBasedMethod("GetCovenantCampaignChaptersInfo")
+		DataStore:SetCharacterBasedMethod("GetStorylineProgress")
+		DataStore:SetCharacterBasedMethod("GetCampaignChaptersInfo")
+	end
 end
 
 function addon:OnEnable()
 	addon:RegisterEvent("PLAYER_ALIVE", OnPlayerAlive)
 	addon:RegisterEvent("UNIT_QUEST_LOG_CHANGED", OnUnitQuestLogChanged)
-	addon:RegisterEvent("WORLD_QUEST_COMPLETED_BY_SPELL", ScanQuests)
-	addon:RegisterEvent("COVENANT_CALLINGS_UPDATED", OnCovenantCallingsUpdated)
-	addon:RegisterEvent("QUEST_TURNED_IN", OnQuestTurnedIn)
+	if WOW_PROJECT_ID == WOW_PROJECT_MAINLINE then
+		addon:RegisterEvent("WORLD_QUEST_COMPLETED_BY_SPELL", ScanQuests)
+		addon:RegisterEvent("COVENANT_CALLINGS_UPDATED", OnCovenantCallingsUpdated)
+		addon:RegisterEvent("QUEST_TURNED_IN", OnQuestTurnedIn)
+	end
 
 	addon:SetupOptions()
 
@@ -1002,20 +1090,26 @@ function addon:OnEnable()
 	UIDropDownMenu_SetSelectedValue(frame, GetOption("DailyResetHour"))
 	
 	ClearExpiredDailies()
-	InjectCallingsAsEmissaries()
+	if WOW_PROJECT_ID == WOW_PROJECT_MAINLINE then
+		InjectCallingsAsEmissaries()
+	end
 end
 
 function addon:OnDisable()
 	addon:UnregisterEvent("PLAYER_ALIVE")
 	addon:UnregisterEvent("UNIT_QUEST_LOG_CHANGED")
 	addon:UnregisterEvent("QUEST_QUERY_COMPLETE")
-	addon:UnregisterEvent("WORLD_QUEST_COMPLETED_BY_SPELL")
-	addon:UnregisterEvent("COVENANT_CALLINGS_UPDATED")
+	
+	if WOW_PROJECT_ID == WOW_PROJECT_MAINLINE then
+		addon:UnregisterEvent("WORLD_QUEST_COMPLETED_BY_SPELL")
+		addon:UnregisterEvent("COVENANT_CALLINGS_UPDATED")
+	end
 end
 
 -- *** Hooks ***
 -- GetQuestReward is the function that actually turns in a quest
 hooksecurefunc("GetQuestReward", function(choiceIndex)
+	-- 2019/09/09 : questID is valid, even in Classic
 	local questID = GetQuestID() -- returns the last displayed quest dialog's questID
 
 	if not GetOption("TrackTurnIns") or not questID then return end
@@ -1031,28 +1125,34 @@ hooksecurefunc("GetQuestReward", function(choiceIndex)
 	-- mark the current quest ID as completed
 	history[index] = bOr((history[index] or 0), 2^bitPos)	-- read: value = SetBit(value, bitPosition)
 
-	-- track daily quests turn-ins
-	if QuestIsDaily() or emissaryQuests[questID] then
-		-- I could not find a function to test if a quest is emissary, so their id's are tracked manually
-		
-		table.insert(addon.ThisCharacter.Dailies, {
-			title = GetTitleText(),
-			id = questID,
-			timestamp = time(),
-			expiresIn = C_DateAndTime.GetSecondsUntilDailyReset()
-			-- https://wowpedia.fandom.com/wiki/API_C_DateAndTime.GetSecondsUntilDailyReset
-		})
-	end
+	if WOW_PROJECT_ID == WOW_PROJECT_MAINLINE or WOW_PROJECT_ID == WOW_PROJECT_WRATH_CLASSIC then
 
-	-- track weekly quests turn-ins
-	if QuestIsWeekly() then
-		table.insert(addon.ThisCharacter.Weeklies, {
-			title = GetTitleText(),
-			id = questID,
-			timestamp = time(),
-			expiresIn = C_DateAndTime.GetSecondsUntilWeeklyReset()
-		})
+		-- track daily quests turn-ins
+		if QuestIsDaily() or emissaryQuests[questID] then
+			-- I could not find a function to test if a quest is emissary, so their id's are tracked manually
+			
+			table.insert(addon.ThisCharacter.Dailies, {
+				title = GetTitleText(),
+				id = questID,
+				timestamp = time(),
+				expiresIn = C_DateAndTime.GetSecondsUntilDailyReset()
+				-- https://wowpedia.fandom.com/wiki/API_C_DateAndTime.GetSecondsUntilDailyReset
+			})
+		end
 	end
+	
+	if WOW_PROJECT_ID == WOW_PROJECT_MAINLINE then
 
+		-- track weekly quests turn-ins
+		if QuestIsWeekly() then
+			table.insert(addon.ThisCharacter.Weeklies, {
+				title = GetTitleText(),
+				id = questID,
+				timestamp = time(),
+				expiresIn = C_DateAndTime.GetSecondsUntilWeeklyReset()
+			})
+		end
+	end
+	
 	addon:SendMessage("DATASTORE_QUEST_TURNED_IN", questID)		-- trigger the DS event
 end)

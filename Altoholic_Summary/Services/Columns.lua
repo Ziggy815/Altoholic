@@ -49,7 +49,7 @@ addon:Service("AltoholicUI.TabSummaryColumnProfiles",  function()
 		-- Currencies / Warlords of Draenor
 		[13] = { "Name", "Level", "Cur_Garrison", "Cur_Oil", "Cur_Apexis", "Cur_InevitableFate", "Cur_TemperedFate", "Cur_ArtifactFragment" },
 		-- Currencies / Legion
-		[14] = { "Name", "Level", "Cur_OrderHall", "Cur_WarSupplies", "Cur_Nethershard", "Cur_BrokenFate", "Cur_SightlessEye", "Cur_AncientMana" },
+		[14] = { "Name", "Level", "Cur_OrderHall", "Cur_WarSupplies", "Cur_Nethershard", "Cur_BrokenFate", "Cur_SightlessEye", "Cur_AncientMana", "Cur_VeiledArgunite" },
 		-- Currencies / Battle for Azeroth
 		[15] = { "Name", "Level", "Cur_WarResources", "Cur_WartornFate", "Cur_BfADubloons", "Cur_BfAWarSupplies", "Cur_BfARichAzerite" },
 		-- Currencies / Shadowlands 9.0
@@ -74,18 +74,27 @@ addon:Service("AltoholicUI.TabSummaryColumnProfiles",  function()
 		-- Currencies / Shadowlands 9.2
 		[23] = { "Name", "Level", "Cur_Cyphers", "Cur_CosmicFlux" },
 		-- Expansion Features / Shadowlands / Campaign Progress
-		[24] = { "Name", "Level", "Story90", "Story91", "Story92" },
+		[24] = { "Name", "Level", "Story90", "StoryTorghast", "Story91", "Story92" },
 		-- Expansion Features / Shadowlands / Cypher Research
 		[25] = { "Name", "Level", "CypherLvl", "Metrial", "Aealic", "Dealic", "Trebalim", "Cur_Cyphers" },
 		
 		-- Weekly Rewards
 		[26] = { "Name", "Level", "RewardMythic", "RewardRaid", "RewardPvP" },
 
-		-- Currencies / Dragonflight 10.0 & 10.1
-		[27] = { "Name", "Level", "Cur_DragonIslesSupplies", "Cur_ElementalOverflow", "Cur_StormSigil", "Cur_ConquestPoints", "Cur_Honor", "Cur_Flightstones" },
+		-- Currencies / Dragonflight 10.0
+		[27] = { "Name", "Level", "Cur_DragonIslesSupplies", "Cur_ElementalOverflow", "Cur_StormSigil", "Cur_ConquestPoints", "Cur_Honor" },
+
+		-- Currencies / Dragonflight 10.1
+		[28] = { "Name", "Level", "Cur_Flightstones", "Cur_ParacausalFlakes", "Cur_RidersofAzerothBadge" },
+
+		-- Currencies / Dragonflight 10.2
+		[29] = { "Name", "Level", "Cur_EmeraldDewdrop","Cur_WhelplingsDreamingCrest", "Cur_DrakesDreamingCrest", "Cur_WyrmsDreamingCrest", "Cur_AspectsDreamingCrest", "Cur_DreamInfusion" },
 		
 		-- Weekly Best Runs per dungeon
-		[28] = { "Name", "Level", "MPlus1", "MPlus2", "MPlus3", "MPlus4", "MPlus5", "MPlus6", "MPlus7", "MPlus8" },
+		[30] = { "Name", "Level", "MPlus1", "MPlus2", "MPlus3", "MPlus4", "MPlus5", "MPlus6", "MPlus7", "MPlus8" },
+		
+		-- Expansion Features / Dragonflight / Campaign Progress
+		[31] = { "Name", "Level", "Story100", "Story101", "Story1015", "Story102" },
 	}
 
 	return {

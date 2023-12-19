@@ -47,6 +47,7 @@ enum.CurrencyIDs = {
 	SealOfBrokenFate = 1273,
 	SightlessEye = 1149,
 	AncientMana = 1155,
+	VeiledArgunite = 1508,
 	
 	-- Battle for Azeroth
 	WarResources = 1560,
@@ -82,5 +83,15 @@ enum.CurrencyIDs = {
 	Honor = 1792,
 	
 	-- Dragonflight 10.1
-	Flightstones = 2245,				  
+	Flightstones = 2245,
+	ParacausalFlakes = 2594,
+	RidersofAzerothBadge = 2588,
+
+	-- Dragonflight 10.2
+	WhelplingsDreamingCrest = 2706,
+	DrakesDreamingCrest = 2707,
+	WyrmsDreamingCrest = 2708,
+	AspectsDreamingCrest = 2709,
+	EmeraldDewdrop = 2650,
+	DreamInfusion = 2777,
 }

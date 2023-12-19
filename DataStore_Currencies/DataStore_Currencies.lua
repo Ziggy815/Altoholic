@@ -45,15 +45,8 @@ local AddonDB_Defaults = {
 
 -- *** Utility functions ***
 local bAnd = bit.band
-
-local function LeftShift(value, numBits)
-	return value * (2 ^ numBits)
-end
-
-local function RightShift(value, numBits)
-	-- for bits beyond bit 31
-	return math.floor(value / 2^numBits)
-end
+local LeftShift = DataStore.LeftShift
+local RightShift = DataStore.RightShift
 
 local headersState
 local headerCount
@@ -594,7 +587,12 @@ function addon:OnEnable()
 	addon:RegisterEvent("PLAYER_INTERACTION_MANAGER_FRAME_SHOW", OnCovenantSanctumInteractionStarted)
 	
 	local _, _, arch = GetProfessions()
-	
+
+	if arch and RequestArtifactCompletionHistory then
+		--	ARTIFACT_HISTORY_READY deprecated in 8.0
+		-- addon:RegisterEvent("ARTIFACT_HISTORY_READY", OnArtifactHistoryReady)
+		RequestArtifactCompletionHistory()		-- this will trigger ARTIFACT_HISTORY_READY
+	end
 end
 
 function addon:OnDisable()

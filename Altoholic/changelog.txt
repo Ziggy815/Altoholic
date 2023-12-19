@@ -15,6 +15,67 @@ How to support Altoholic's development :
 If you like the addon, consider supporting it, this has been the long term effort and commitment of a single person. #ArmyOfOne
 
 
+10.2.010 (17/12/2023)
+
+- LibItemInfo: added a few Emerald Dream zone items.
+- LibItemInfo: minor code rework.
+- DataStore_Currencies: added Legion Veiled Argunite.
+- Summary tab: added Legion Veiled Argunite to Currencies->Legion.
+- Summary tab -> Expansion features: added a column for Torghast progress in Shadowlands.
+- Summary tab -> Expansion features: added a section for Dragonflight campaign progress.
+- DataStore_Quests: Reworked the tracking of campaign progress. 
+Shadowlands covenant progress is preserved, but 9.1 and 9.2 have changed, so you need to login your alts again to get the proper values.
+
+
+10.2.009 (10/12/2023)
+
+- DataStore_Quests: Added weekly world bosses.
+- DataStore_Containers: Fixed Bag5 being treated as the reagent bag in non-retail, causing the proper count not to be displayed for the first bank bag.
+
+10.2.008 (07/12/2023)
+
+- First release via Github.
+- ToC Update.
+
+10.2.007 (26/11/2023)
+
+- DataStore_Crafts: The module is now shared between all versions of the game.
+- This concludes the conversion of all DataStore modules to make them compatible with all versions.
+
+10.2.006 (20/11/2023)
+
+- DataStore_Quests: The module is now shared between all versions of the game.
+- DataStore_Talents: The module is now shared between all versions of the game.
+- DataStore_Reputations: The module is now shared between all versions of the game.
+- DataStore_Containers: Fixed COMMON_NUM_BAG_SLOTS to be NUM_BAG_SLOTS + 1 for retail, and NUM_BAG_SLOTS for non-retail, instead of the opposite.
+
+10.2.005 (17/11/2023)
+
+- Fixed an issue where sorting the bags while the merchant frame is opened would trigger a slow down (Thanks Belazor !)
+- DataStore_Containers: Removed an invalid test when closing a bank frame.
+- Events : fixed a Lua error when a tracked item like an egg actually hatches.
+
+10.2.004 (14/11/2023)
+
+- DataStore_Containers: The module is now shared between all versions of the game.
+
+10.2.003 (11/11/2023)
+
+- DataStore_Currencies: Added the Dream Infusion currency.
+
+10.2.002 (08/11/2023)
+
+- DataStore_Currencies: Added the Emerald Dewrop currency.
+- Summary Tab : Added the Emerald Dewrop currency (Thanks Feral!)
+
+10.2.001 (08/11/2023)
+
+- DataStore_Crafts & DataStore_Currencies: Fixed a lua error related to artifacts.
+- Added new 10.2 currencies & reputations (Thanks Feral !)
+- DataStore_Auctions is now generic and works will all versions of the game.
+- DataStore_Inventory is now generic and works will all versions of the game.
+
+
 10.1.005 (18/05/2023)
 
 - DataStore_Agenda is now generic and works will all versions of the game.
@@ -307,7 +368,7 @@ Now for the good stuff, here is what changed:
 Ex: I have 24 alts on my main server, 12 are my mains, 12 are banks, I created 2 groups to separate them.
 Check the help in-game for the details.
 
-- Summary tab: Introducting bank characters filters => you can now mark an alt as a special type of bank.
+- Summary tab: Introducing bank characters filters => you can now mark an alt as a special type of bank.
 Ex: Mark an alt as a mining bank, or a cloth bank, or both !
 You can then easily find these alts back using filters.
 
